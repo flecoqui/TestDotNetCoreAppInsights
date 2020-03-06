@@ -75,7 +75,8 @@ namespace Company.Function
         public void Dispose()
         {
             TimeSpan ts = DateTime.Now - start;
-            _telemetryClient.GetMetric("RequestDurationMs").TrackValue(ts.TotalMilliseconds);
+            this._telemetryClient.TrackMetric("RequestDurationMs",ts.TotalMilliseconds);
+            //_telemetryClient.GetMetric("RequestDurationMs").TrackValue(ts.TotalMilliseconds);
         }
 
     }
@@ -93,13 +94,15 @@ namespace Company.Function
         {
 
             this._telemetryClient = telemetryClient;
+            
 #pragma warning disable CS0618 
-            TelemetryProcessorChainBuilder builder = TelemetryConfiguration.Active.DefaultTelemetrySink.TelemetryProcessorChainBuilder;
+ //           TelemetryProcessorChainBuilder builder = TelemetryConfiguration.Active.DefaultTelemetrySink.TelemetryProcessorChainBuilder;
 #pragma warning restore CS0618
-            // some custom telemetry processor for Application Insights that filters out synthetic traffic (e.g traffic that comes from Azure to keep the server awake).
-            builder.UseAdaptiveSampling(excludedTypes: "Exception");
-            builder.UseAdaptiveSampling(maxTelemetryItemsPerSecond: 10000);
-            builder.Build();
+ //           // some custom telemetry processor for Application Insights that filters out synthetic traffic (e.g traffic that comes from Azure to keep the server awake).
+ // Dependency, Event, Exception, PageView, Request, Trace
+ //           builder.UseAdaptiveSampling(excludedTypes: "Exception");
+ //           builder.UseAdaptiveSampling(maxTelemetryItemsPerSecond: 10000);
+ //           builder.Build();
         }
 
         private TelemetryClient _telemetryClient;
@@ -115,13 +118,14 @@ namespace Company.Function
         
         private void SetMaxTelemetryItemsPerSecond(int value)
         {
+            
 #pragma warning disable CS0618 
             var builder = TelemetryConfiguration.Active.DefaultTelemetrySink.TelemetryProcessorChainBuilder;
 #pragma warning restore CS0618
             if(value>1000)
                 builder.UseAdaptiveSampling(excludedTypes: "Exception");
             else
-                builder.UseAdaptiveSampling(excludedTypes: "Exception,Event");
+                builder.UseAdaptiveSampling(excludedTypes: "Exception;Event");
 
             builder.UseAdaptiveSampling(maxTelemetryItemsPerSecond: value);
             builder.Build();
@@ -133,11 +137,28 @@ namespace Company.Function
             ILogger log)
         {
             
-            log.LogInformation("C# HTTP trigger function processed a request.");
+            string ip = GetIpFromRequestHeaders(req);
+            log.LogInformation($"C# HTTP trigger function processed a request from {ip}.");
+
             // Log Event 
-            var evt = new EventTelemetry("Function values called");
-            evt.Context.Device.Id = GetIpFromRequestHeaders(req);
-            this._telemetryClient.TrackEvent(evt);
+            this._telemetryClient.TrackEvent($"TrackEvent: Function values called from ip: {ip} ");
+            
+            // Log Trace with telemetry client
+            this._telemetryClient.TrackTrace($"TrackTrace: Function values called from ip: {ip}");
+
+
+/*
+            DateTime start= DateTime.Now;            
+            TimeSpan ts = DateTime.Now - start;
+            this._telemetryClient.TrackMetric("RequestDurationMs",ts.TotalMilliseconds);
+
+
+            log.LogTrace("Trace Function values called");
+            log.LogMetric("Metric Test",0);
+            var sr = TelemetryConfiguration.Active.GetLastObservedSamplingPercentage(SamplingTelemetryItemTypes.Request);
+            log.LogInformation($"Information sampling rate for request: {sr}");
+  */          
+
             if (req.Method.Equals("post",StringComparison.OrdinalIgnoreCase))
             {
                 string value = await (new StreamReader(req.Body)).ReadToEndAsync();
@@ -161,7 +182,7 @@ namespace Company.Function
             else if (req.Method.Equals("get",StringComparison.OrdinalIgnoreCase))
             {
                 TestResponse t = new TestResponse();
-                t.name = "testResponse";
+                t.name = "testResponsev1.1";
                 t.value = requestCounter.ToString();
                 return await Task.FromResult(new JsonResult(t));
             }
